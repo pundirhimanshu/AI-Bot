@@ -2,8 +2,12 @@
 
 import { useState, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Search, Mic, Camera, Send, Sparkles, Square, ChevronDown } from "lucide-react";
+import { Search, Mic, Camera, Send, Sparkles, Square, ChevronDown, Lock } from "lucide-react";
 import { cn } from "@/lib/utils";
+import GoogleLogin from "@/components/GoogleLogin";
+import { auth } from "@/lib/firebase";
+import { User } from "firebase/auth";
+import { useEffect } from "react";
 
 const MODELS = [
     { id: "gemini", name: "Gemini 2.5 Flash", icon: "✨", color: "from-blue-500 to-purple-500" },
@@ -11,6 +15,8 @@ const MODELS = [
 ];
 
 export default function Home() {
+    const [user, setUser] = useState<User | null>(null);
+    const [authLoading, setAuthLoading] = useState(true);
     const [prompt, setPrompt] = useState("");
     const [response, setResponse] = useState<string | null>(null);
     const [isLoading, setIsLoading] = useState(false);
@@ -19,6 +25,14 @@ export default function Home() {
     const [showModelPicker, setShowModelPicker] = useState(false);
     const abortControllerRef = useRef<AbortController | null>(null);
     const stopFlagRef = useRef(false);
+
+    useEffect(() => {
+        const unsubscribe = auth.onAuthStateChanged((user) => {
+            setUser(user);
+            setAuthLoading(false);
+        });
+        return () => unsubscribe();
+    }, []);
 
     const currentModel = MODELS.find(m => m.id === selectedModel) || MODELS[0];
 
@@ -84,7 +98,12 @@ export default function Home() {
     const showStopButton = isLoading || isTyping;
 
     return (
-        <main className="flex flex-col items-center justify-center min-h-screen p-4 md:p-24 overflow-hidden bg-black">
+        <main className="flex flex-col items-center justify-center min-h-screen p-4 md:p-24 overflow-hidden bg-black relative">
+            {/* Header / Auth */}
+            <div className="absolute top-8 right-8 z-50">
+                <GoogleLogin />
+            </div>
+
             {/* Background Glow */}
             <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] bg-blue-500/10 rounded-full blur-[120px] pointer-events-none" />
 
@@ -162,48 +181,50 @@ export default function Home() {
                 </motion.div>
 
                 {/* Search Bar Container */}
-                <motion.form
-                    onSubmit={handleSubmit}
-                    initial={{ opacity: 0, scale: 0.95 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    transition={{ delay: 0.1 }}
-                    className="w-full relative group"
-                >
-                    <div className={cn(
-                        "w-full glass-morphism rounded-full px-6 py-4 flex items-center gap-4 transition-all duration-300",
-                        "group-hover:bg-white/10 group-focus-within:bg-white/10 group-focus-within:ring-2 ring-blue-500/50 shadow-2xl"
-                    )}>
-                        <Search className="text-gray-400 w-5 h-5 flex-shrink-0" />
-                        <input
-                            type="text"
-                            value={prompt}
-                            onChange={(e) => setPrompt(e.target.value)}
-                            placeholder="Type your prompt here..."
-                            className="bg-transparent border-none outline-none flex-grow text-white placeholder-gray-500 text-lg"
-                        />
-                        <div className="flex items-center gap-3">
-                            <Mic className="text-blue-500 w-5 h-5 cursor-pointer hover:scale-110 transition-transform hidden sm:block" />
-                            <Camera className="text-gray-400 w-5 h-5 cursor-pointer hover:scale-110 transition-transform hidden sm:block" />
-                            {showStopButton ? (
-                                <button
-                                    type="button"
-                                    onClick={handleStop}
-                                    className="p-2 rounded-full bg-red-500/20 hover:bg-red-500/40 transition-all duration-200 active:scale-90"
-                                    title="Stop generating"
-                                >
-                                    <Square className="w-4 h-4 text-red-400 fill-red-400" />
-                                </button>
-                            ) : (
-                                <button
-                                    type="submit"
-                                    className="p-2 rounded-full hover:bg-white/10 transition-colors"
-                                >
-                                    <Send className="w-5 h-5 text-blue-500" />
-                                </button>
-                            )}
+                {user && (
+                    <motion.form
+                        onSubmit={handleSubmit}
+                        initial={{ opacity: 0, scale: 0.95 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        transition={{ delay: 0.1 }}
+                        className="w-full relative group"
+                    >
+                        <div className={cn(
+                            "w-full glass-morphism rounded-full px-6 py-4 flex items-center gap-4 transition-all duration-300",
+                            "group-hover:bg-white/10 group-focus-within:bg-white/10 group-focus-within:ring-2 ring-blue-500/50 shadow-2xl"
+                        )}>
+                            <Search className="text-gray-400 w-5 h-5 flex-shrink-0" />
+                            <input
+                                type="text"
+                                value={prompt}
+                                onChange={(e) => setPrompt(e.target.value)}
+                                placeholder="Type your prompt here..."
+                                className="bg-transparent border-none outline-none flex-grow text-white placeholder-gray-500 text-lg"
+                            />
+                            <div className="flex items-center gap-3">
+                                <Mic className="text-blue-500 w-5 h-5 cursor-pointer hover:scale-110 transition-transform hidden sm:block" />
+                                <Camera className="text-gray-400 w-5 h-5 cursor-pointer hover:scale-110 transition-transform hidden sm:block" />
+                                {showStopButton ? (
+                                    <button
+                                        type="button"
+                                        onClick={handleStop}
+                                        className="p-2 rounded-full bg-red-500/20 hover:bg-red-500/40 transition-all duration-200 active:scale-90"
+                                        title="Stop generating"
+                                    >
+                                        <Square className="w-4 h-4 text-red-400 fill-red-400" />
+                                    </button>
+                                ) : (
+                                    <button
+                                        type="submit"
+                                        className="p-2 rounded-full hover:bg-white/10 transition-colors"
+                                    >
+                                        <Send className="w-5 h-5 text-blue-500" />
+                                    </button>
+                                )}
+                            </div>
                         </div>
-                    </div>
-                </motion.form>
+                    </motion.form>
+                )}
 
                 {/* Action Buttons (Google Style) */}
                 {!response && !isLoading && !isTyping && (
@@ -224,30 +245,50 @@ export default function Home() {
 
                 {/* Response Area */}
                 <AnimatePresence>
-                    {(response || isLoading || isTyping) && (
+                    {user ? (
+                        (response || isLoading || isTyping) && (
+                            <motion.div
+                                initial={{ opacity: 0, y: 20 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                exit={{ opacity: 0, y: -20 }}
+                                className="w-full glass-morphism rounded-3xl p-8 shadow-2xl overflow-y-auto max-h-[400px] scrollbar-hide"
+                            >
+                                <div className="flex items-start gap-4">
+                                    <div className={cn(
+                                        "w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 bg-gradient-to-tr",
+                                        currentModel.color
+                                    )}>
+                                        <span className="text-sm">{currentModel.icon}</span>
+                                    </div>
+                                    <div className="space-y-4 flex-grow">
+                                        <p className="text-gray-200 leading-relaxed text-lg whitespace-pre-wrap">
+                                            {response}
+                                            {(isLoading || isTyping) && (
+                                                <span className="inline-block w-1.5 h-6 bg-blue-500 animate-pulse ml-1 align-middle" />
+                                            )}
+                                        </p>
+                                    </div>
+                                </div>
+                            </motion.div>
+                        )
+                    ) : !authLoading ? (
                         <motion.div
-                            initial={{ opacity: 0, y: 20 }}
+                            initial={{ opacity: 0, y: 10 }}
                             animate={{ opacity: 1, y: 0 }}
-                            exit={{ opacity: 0, y: -20 }}
-                            className="w-full glass-morphism rounded-3xl p-8 shadow-2xl overflow-y-auto max-h-[400px] scrollbar-hide"
+                            className="w-full glass-morphism rounded-3xl p-12 shadow-2xl flex flex-col items-center text-center space-y-6 border border-white/5"
                         >
-                            <div className="flex items-start gap-4">
-                                <div className={cn(
-                                    "w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 bg-gradient-to-tr",
-                                    currentModel.color
-                                )}>
-                                    <span className="text-sm">{currentModel.icon}</span>
-                                </div>
-                                <div className="space-y-4 flex-grow">
-                                    <p className="text-gray-200 leading-relaxed text-lg whitespace-pre-wrap">
-                                        {response}
-                                        {(isLoading || isTyping) && (
-                                            <span className="inline-block w-1.5 h-6 bg-blue-500 animate-pulse ml-1 align-middle" />
-                                        )}
-                                    </p>
-                                </div>
+                            <div className="w-16 h-16 rounded-full bg-blue-500/10 flex items-center justify-center">
+                                <Lock className="text-blue-400 w-8 h-8" />
+                            </div>
+                            <div className="space-y-2">
+                                <h3 className="text-2xl font-semibold text-white">Unlock the Full Experience</h3>
+                                <p className="text-gray-400 max-w-sm">
+                                    Please sign in to start chatting with our intelligent AI models.
+                                </p>
                             </div>
                         </motion.div>
+                    ) : (
+                        <div className="w-full h-32 glass-morphism rounded-3xl animate-pulse" />
                     )}
                 </AnimatePresence>
             </div>
