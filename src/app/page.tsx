@@ -27,6 +27,7 @@ export default function Home() {
     const stopFlagRef = useRef(false);
 
     useEffect(() => {
+        if (!auth) return;
         const unsubscribe = auth.onAuthStateChanged((user) => {
             setUser(user);
             setAuthLoading(false);

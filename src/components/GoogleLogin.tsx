@@ -11,6 +11,7 @@ export default function GoogleLogin() {
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
+        if (!auth) return;
         const unsubscribe = auth.onAuthStateChanged((user) => {
             setUser(user);
             setLoading(false);
@@ -19,6 +20,7 @@ export default function GoogleLogin() {
     }, []);
 
     const handleLogin = async () => {
+        if (!auth) return;
         const provider = new GoogleAuthProvider();
         try {
             await signInWithPopup(auth, provider);
@@ -28,6 +30,7 @@ export default function GoogleLogin() {
     };
 
     const handleLogout = async () => {
+        if (!auth) return;
         try {
             await signOut(auth);
         } catch (error) {
