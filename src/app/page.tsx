@@ -2,27 +2,32 @@
 
 import { useState, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Search, Mic, Camera, Send, Sparkles, Square } from "lucide-react";
+import { Search, Mic, Camera, Send, Sparkles, Square, ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
+
+const MODELS = [
+    { id: "gemini", name: "Gemini 2.5 Flash", icon: "✨", color: "from-blue-500 to-purple-500" },
+    { id: "sarvam", name: "Sarvam M", icon: "🇮🇳", color: "from-orange-500 to-pink-500" },
+];
 
 export default function Home() {
     const [prompt, setPrompt] = useState("");
     const [response, setResponse] = useState<string | null>(null);
     const [isLoading, setIsLoading] = useState(false);
     const [isTyping, setIsTyping] = useState(false);
+    const [selectedModel, setSelectedModel] = useState("gemini");
+    const [showModelPicker, setShowModelPicker] = useState(false);
     const abortControllerRef = useRef<AbortController | null>(null);
     const stopFlagRef = useRef(false);
 
-    const handleStop = useCallback(() => {
-        // Set stop flag FIRST — the typing loop checks this on every character
-        stopFlagRef.current = true;
+    const currentModel = MODELS.find(m => m.id === selectedModel) || MODELS[0];
 
-        // Abort the fetch if it's still in progress
+    const handleStop = useCallback(() => {
+        stopFlagRef.current = true;
         if (abortControllerRef.current) {
             abortControllerRef.current.abort();
             abortControllerRef.current = null;
         }
-
         setIsLoading(false);
         setIsTyping(false);
     }, []);
@@ -31,55 +36,42 @@ export default function Home() {
         e.preventDefault();
         if (!prompt.trim() || isLoading) return;
 
-        // Reset stop flag for new request
         stopFlagRef.current = false;
-
         const controller = new AbortController();
         abortControllerRef.current = controller;
 
         setIsLoading(true);
         setIsTyping(false);
         setResponse("");
+        setShowModelPicker(false);
 
         try {
             const res = await fetch("/api/ai", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ prompt }),
+                body: JSON.stringify({ prompt, model: selectedModel }),
                 signal: controller.signal,
             });
 
-            // Check if stopped while waiting for fetch
             if (stopFlagRef.current) return;
-
             if (!res.ok) throw new Error("Failed to fetch response");
 
             const data = await res.json();
-            const geminiResponse = data.result;
+            const aiResponse = data.result;
 
-            if (!geminiResponse || stopFlagRef.current) return;
+            if (!aiResponse || stopFlagRef.current) return;
 
-            // Start typing effect
             setIsTyping(true);
             let currentText = "";
 
-            for (let i = 0; i < geminiResponse.length; i++) {
-                // Check stop flag on EVERY character
-                if (stopFlagRef.current) {
-                    console.log("Stop detected — halting typing at char", i);
-                    break;
-                }
-
-                currentText += geminiResponse[i];
+            for (let i = 0; i < aiResponse.length; i++) {
+                if (stopFlagRef.current) break;
+                currentText += aiResponse[i];
                 setResponse(currentText);
                 await new Promise(r => setTimeout(r, 15));
             }
         } catch (error: any) {
-            if (error.name === "AbortError" || stopFlagRef.current) {
-                // User stopped — keep partial text, no error
-                console.log("Generation stopped by user");
-                return;
-            }
+            if (error.name === "AbortError" || stopFlagRef.current) return;
             console.error(error);
             setResponse("Sorry, I encountered an error. Please try again.");
         } finally {
@@ -107,6 +99,66 @@ export default function Home() {
                         AI Bot
                     </h1>
                     <p className="text-gray-400 text-sm">Simple. Minimal. Intelligent.</p>
+                </motion.div>
+
+                {/* Model Selector */}
+                <motion.div
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    transition={{ delay: 0.05 }}
+                    className="relative"
+                >
+                    <button
+                        type="button"
+                        onClick={() => setShowModelPicker(!showModelPicker)}
+                        className={cn(
+                            "flex items-center gap-2 px-4 py-2 rounded-full glass-morphism text-sm transition-all duration-300",
+                            "hover:bg-white/10 active:scale-95"
+                        )}
+                    >
+                        <span className="text-lg">{currentModel.icon}</span>
+                        <span className="text-gray-200">{currentModel.name}</span>
+                        <ChevronDown className={cn(
+                            "w-4 h-4 text-gray-400 transition-transform duration-200",
+                            showModelPicker && "rotate-180"
+                        )} />
+                    </button>
+
+                    <AnimatePresence>
+                        {showModelPicker && (
+                            <motion.div
+                                initial={{ opacity: 0, y: -8, scale: 0.95 }}
+                                animate={{ opacity: 1, y: 0, scale: 1 }}
+                                exit={{ opacity: 0, y: -8, scale: 0.95 }}
+                                transition={{ duration: 0.15 }}
+                                className="absolute top-full mt-2 left-1/2 -translate-x-1/2 w-56 glass-morphism rounded-2xl p-2 shadow-2xl border border-white/10 z-50"
+                            >
+                                {MODELS.map((model) => (
+                                    <button
+                                        key={model.id}
+                                        onClick={() => {
+                                            setSelectedModel(model.id);
+                                            setShowModelPicker(false);
+                                        }}
+                                        className={cn(
+                                            "w-full flex items-center gap-3 px-3 py-3 rounded-xl text-left transition-all duration-200",
+                                            selectedModel === model.id
+                                                ? "bg-white/15 text-white"
+                                                : "text-gray-300 hover:bg-white/10 hover:text-white"
+                                        )}
+                                    >
+                                        <span className="text-lg">{model.icon}</span>
+                                        <div>
+                                            <p className="text-sm font-medium">{model.name}</p>
+                                        </div>
+                                        {selectedModel === model.id && (
+                                            <div className={cn("ml-auto w-2 h-2 rounded-full bg-gradient-to-r", model.color)} />
+                                        )}
+                                    </button>
+                                ))}
+                            </motion.div>
+                        )}
+                    </AnimatePresence>
                 </motion.div>
 
                 {/* Search Bar Container */}
@@ -180,8 +232,11 @@ export default function Home() {
                             className="w-full glass-morphism rounded-3xl p-8 shadow-2xl overflow-y-auto max-h-[400px] scrollbar-hide"
                         >
                             <div className="flex items-start gap-4">
-                                <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-blue-500 to-purple-600 flex items-center justify-center flex-shrink-0">
-                                    <Sparkles className="w-5 h-5 text-white" />
+                                <div className={cn(
+                                    "w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 bg-gradient-to-tr",
+                                    currentModel.color
+                                )}>
+                                    <span className="text-sm">{currentModel.icon}</span>
                                 </div>
                                 <div className="space-y-4 flex-grow">
                                     <p className="text-gray-200 leading-relaxed text-lg whitespace-pre-wrap">
