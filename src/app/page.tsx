@@ -2,7 +2,7 @@
 
 import { useState, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Search, Mic, Camera, Send, Sparkles, Square, ChevronDown, Lock } from "lucide-react";
+import { Search, Send, Sparkles, Square, ChevronDown, Lock } from "lucide-react";
 import { cn } from "@/lib/utils";
 import GoogleLogin from "@/components/GoogleLogin";
 import { auth } from "@/lib/firebase";
@@ -36,6 +36,7 @@ export default function Home() {
     }, []);
 
     const currentModel = MODELS.find(m => m.id === selectedModel) || MODELS[0];
+    const typingTimerRef = useRef<NodeJS.Timeout | null>(null);
 
     const handleStop = useCallback(() => {
         stopFlagRef.current = true;
@@ -43,8 +44,14 @@ export default function Home() {
             abortControllerRef.current.abort();
             abortControllerRef.current = null;
         }
+        if (typingTimerRef.current) {
+            clearTimeout(typingTimerRef.current);
+            typingTimerRef.current = null;
+        }
         setIsLoading(false);
         setIsTyping(false);
+        setResponse(null);
+        setPrompt("");
     }, []);
 
     const handleSubmit = async (e: React.FormEvent) => {
@@ -76,22 +83,33 @@ export default function Home() {
 
             if (!aiResponse || stopFlagRef.current) return;
 
+            setIsLoading(false);
             setIsTyping(true);
-            let currentText = "";
 
-            for (let i = 0; i < aiResponse.length; i++) {
-                if (stopFlagRef.current) break;
-                currentText += aiResponse[i];
-                setResponse(currentText);
-                await new Promise(r => setTimeout(r, 15));
-            }
+            // Use a cancellable recursive timeout instead of a for-loop
+            await new Promise<void>((resolve) => {
+                let i = 0;
+                const typeNext = () => {
+                    if (i >= aiResponse.length || stopFlagRef.current) {
+                        typingTimerRef.current = null;
+                        resolve();
+                        return;
+                    }
+                    i++;
+                    setResponse(aiResponse.slice(0, i));
+                    typingTimerRef.current = setTimeout(typeNext, 15);
+                };
+                typeNext();
+            });
         } catch (error: any) {
             if (error.name === "AbortError" || stopFlagRef.current) return;
             console.error(error);
             setResponse("Sorry, I encountered an error. Please try again.");
         } finally {
-            setIsLoading(false);
-            setIsTyping(false);
+            if (!stopFlagRef.current) {
+                setIsLoading(false);
+                setIsTyping(false);
+            }
             abortControllerRef.current = null;
         }
     };
@@ -203,8 +221,6 @@ export default function Home() {
                                 className="bg-transparent border-none outline-none flex-grow text-white placeholder-gray-500 text-lg"
                             />
                             <div className="flex items-center gap-3">
-                                <Mic className="text-blue-500 w-5 h-5 cursor-pointer hover:scale-110 transition-transform hidden sm:block" />
-                                <Camera className="text-gray-400 w-5 h-5 cursor-pointer hover:scale-110 transition-transform hidden sm:block" />
                                 {showStopButton ? (
                                     <button
                                         type="button"
